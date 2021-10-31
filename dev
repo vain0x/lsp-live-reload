@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -eu
+trap 'kill 0' INT
+
+dotnet watch -p my-lsp-server build &
+
+(
+    cd vscode-ext
+    npm run webpack-watch
+) &
+
+wait

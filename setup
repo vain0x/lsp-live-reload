@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+dotnet build
+
+(
+    cd vscode-ext
+    npm ci
+    npm run webpack-build
+)
