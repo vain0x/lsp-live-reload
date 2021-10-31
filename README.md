@@ -22,7 +22,7 @@ Example of VSCode extension as LSP client with auto-reload enabled.
 Requirement:
 
 - .NET SDK
-- bash  Use Git Bash on Windows.)
+- bash (Use Git Bash on Windows.)
 
 ```sh
 # Restore and build things for first time.
