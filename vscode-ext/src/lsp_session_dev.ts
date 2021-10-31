@@ -3,6 +3,7 @@
 
 import fs, { FSWatcher } from "fs"
 import fsP from "fs/promises"
+import path from "path"
 import { ExtensionContext } from "vscode"
 import { LanguageClient, State } from "vscode-languageclient/node"
 import { debounce } from "lodash"
@@ -12,12 +13,16 @@ const RETRY_TIME = 60 * 1000
 const RETRY_INTERVAL = 100
 
 export const startLspSessionDev = (options: {
-  /** Executable file to be watched. */
-  exeFile: string
+  /** Directory where executable and related files are written. */
+  outputDir: string
+
+  /** Another directory where contents are copied from outputDir. */
+  backupDir: string
+
   context: ExtensionContext
-  newLanguageClient: (lspServerCommand: string) => LanguageClient
+  newLanguageClient: () => LanguageClient
 }): void => {
-  const { exeFile, context, newLanguageClient } = options
+  const { outputDir, backupDir, context, newLanguageClient } = options
 
   // Watcher:
   let watcher: FSWatcher | undefined
@@ -25,7 +30,7 @@ export const startLspSessionDev = (options: {
 
   const ensureWatch = () => {
     watcher?.close()
-    watcher = fs.watch(exeFile)
+    watcher = fs.watch(outputDir)
     watcher.once("change", requestReload)
     watcher.on("error", err => console.error("watcher error", err))
   }
@@ -33,24 +38,23 @@ export const startLspSessionDev = (options: {
 
 
   // Backup:
-  const backupFile = exeFile.replace(/\.exe$/, "") + "_backup.exe"
-
-  // Copy executable file to not lock it while running server.
+  // Copy files to not lock or mutate while running server.
   // Note that writing to running executable is rejected as ETXTBSY.
-  const backupExe = async () => performAsyncWithRetry(async () => {
-    await fsP.copyFile(exeFile, backupFile)
+  const backupFiles = async () => performAsyncWithRetry(async () => {
+    await copyDirRecursively(outputDir, backupDir)
   }, {
     count: RETRY_TIME / RETRY_INTERVAL,
     intervalMs: RETRY_INTERVAL,
   })
-  context.subscriptions.push({
-    dispose: () => { fsP.unlink(backupFile).catch(() => undefined) }
-  })
+  const clearBackupFiles = async (): Promise<void> => {
+    await unlinkDirRecursively(backupDir)
+  }
+  context.subscriptions.push({ dispose: () => { clearBackupFiles() } })
 
 
 
   // LanguageClient:
-  const client = newLanguageClient(backupFile)
+  const client = newLanguageClient()
   context.subscriptions.push({ dispose: () => { client.stop() } })
 
   context.subscriptions.push(
@@ -71,7 +75,7 @@ export const startLspSessionDev = (options: {
       }
 
       console.log("reload: backup.")
-      await backupExe()
+      await backupFiles()
       ensureWatch()
 
       console.log("reload: starting client.")
@@ -124,6 +128,62 @@ const performAsyncWithRetry = async <A>(
   }
 
   return await action()
+}
+
+const copyDirRecursively = async (srcDir: string, destDir: string): Promise<void> => {
+  console.log("copyDir", srcDir, destDir)
+  await fsP.mkdir(destDir, { recursive: true })
+
+  const files = await fsP.readdir(srcDir)
+  console.log("files", files.length)
+
+  for (const filename of files) {
+    const srcFile = path.join(srcDir, filename)
+    const destFile = path.join(destDir, filename)
+
+    const stat = await fsP.lstat(srcFile)
+    if (stat.isDirectory()) {
+      await copyDirRecursively(srcFile, destFile)
+    } else if (stat.isFile()) {
+      await fsP.copyFile(srcFile, destFile)
+    } else if (stat.isSymbolicLink()) {
+      const target = await fsP.realpath(srcFile)
+      await fsP.symlink(target, destFile)
+    } else {
+      console.error("warn: couldn't copy file", srcFile)
+    }
+  }
+}
+
+const unlinkDirRecursively = async (dir: string): Promise<void> => {
+  const files = await fsP.readdir(dir).catch((err: { code: string }) => {
+    if (err.code === "ENOENT") {
+      return []
+    }
+    throw err
+  })
+
+  for (const filename of files) {
+    const filepath = path.join(dir, filename)
+    const stat = await fsP.lstat(filepath)
+    if (stat.isDirectory()) {
+      await unlinkDirRecursively(filepath)
+    } else {
+      await fsP.unlink(filepath).catch(err => {
+        if (err.code === "ENOENT") {
+          return // OK.
+        }
+        throw err
+      })
+    }
+  }
+
+  await fsP.unlink(dir).catch(err => {
+    if (err.code === "ENOENT") {
+      return // OK.
+    }
+    throw err
+  })
 }
 
 const stateDisplay = (state: State): string =>

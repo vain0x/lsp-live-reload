@@ -17,7 +17,8 @@
                     "--extensionDevelopmentPath=${workspaceFolder}/vscode-ext"
                 ],
                 "env": {
-                    "LSP_SERVER_COMMAND": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0/MyLspServer"
+                    "LSP_SERVER_COMMAND": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0/MyLspServer",
+                    "LSP_SERVER_OUTPUT_DIR": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0"
                 }
             },
             "windows": {
@@ -28,7 +29,8 @@
                     "--extensionDevelopmentPath=${workspaceFolder}/vscode-ext"
                 ],
                 "env": {
-                    "LSP_SERVER_COMMAND": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0/MyLspServer.exe"
+                    "LSP_SERVER_COMMAND": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0/MyLspServer.exe",
+                    "LSP_SERVER_OUTPUT_DIR": "${workspaceFolder}/my-lsp-server/bin/Debug/net5.0"
                 }
             }
         }
