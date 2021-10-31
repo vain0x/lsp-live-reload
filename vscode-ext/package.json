@@ -1,5 +1,5 @@
 {
-  "name": "vscode-lsp-client-live-reload",
+  "name": "vscode-auto-reload-lsp-server",
   "version": "0.1.0",
   "description": "",
   "author": "vain0x <vainzerox@gmail.com>",
@@ -13,7 +13,7 @@
   },
   "keywords": [],
   "main": "dist/extension.js",
-  "repository": "https://github.com/vain0x/vscode-lsp-client-live-reload",
+  "repository": "https://github.com/vain0x/vscode-auto-reload-lsp-server",
   "scripts": {
     "webpack-build": "webpack --mode production",
     "webpack-watch": "webpack --mode development --watch"
