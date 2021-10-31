@@ -26,7 +26,9 @@ let onInitializeRequest msgId =
   let result =
     jsonDeserializeString
       """{
-        "capabilities": {},
+        "capabilities": {
+          "colorProvider": true
+        },
         "serverInfo": {
             "name": "my_lsp_server",
             "version": "0.1.0"
@@ -75,6 +77,36 @@ let createLspServer () : JsonValue -> unit =
     | "exit" ->
       eprintfn "Server exits with %d." exitCode
       exit exitCode
+
+    | "textDocument/documentColor" ->
+      let result =
+        jsonDeserializeString
+          """
+            [{
+              "range": {
+                "start": { "line": 0, "character": 0 },
+                "end" : { "line": 0, "character": 1 }
+              },
+              "color": { "red": 0.4, "green": 0.8, "blue": 0.4, "alpha": 1 }
+            }, {
+              "range": {
+                "start": { "line": 1, "character": 0 },
+                "end" : { "line": 1, "character": 1 }
+              },
+              "color": { "red": 0.4, "green": 0.4, "blue": 0.8, "alpha": 1 }
+            }]
+          """
+
+      jsonRpcWriteWithResult (getMsgId ()) result
+
+    | "textDocument/colorPresentation" ->
+      let result =
+        jsonDeserializeString
+          """
+            [{ "label": "color" }]
+          """
+
+      jsonRpcWriteWithResult (getMsgId ()) result
 
     | _ when methodName.StartsWith("$/") -> ()
     | _ -> onUnknownMethodRequest (getMsgId ()) methodName

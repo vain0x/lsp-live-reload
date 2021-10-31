@@ -5,7 +5,7 @@ open MyLspServer.LspServer
 
 [<EntryPoint>]
 let main _ =
-  eprintfn "MyLspServer started!"
+  eprintfn "MyLspServer started."
 
   let reader = createJsonRpcReader ()
   let server = createLspServer ()
