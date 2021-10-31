@@ -1,6 +1,5 @@
 // Entrypoint of extension.
 
-import cp from "child_process"
 import path from "path"
 import { ExtensionContext } from "vscode"
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node"
@@ -37,18 +36,6 @@ const newLanguageClient = (lspServerCommand: string): LanguageClient => {
   const serverOptions: ServerOptions = {
     command: lspServerCommand,
   }
-  // const serverOptions: ServerOptions = async () => {
-  //   const p = cp.spawn(lspServerCommand)
-  //   p.stderr.on("readable", () => {
-  //     while (true) {
-  //       const chunk: string = p.stderr.read()?.toString() ?? ""
-  //       if (chunk === "") break
-  //       console.log("server stderr", chunk.trimEnd())
-  //     }
-  //   })
-  //   p.on("error", err => { console.error("spawn error", err) })
-  //   return p
-  // }
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "plaintext" }],
   }

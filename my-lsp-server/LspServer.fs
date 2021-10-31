@@ -62,8 +62,6 @@ let createLspServer () : JsonValue -> unit =
       | JString it -> it
       | _ -> "$/noMethod"
 
-    // eprintfn "Received message method:%s id:%A" methodName (getMsgId ())
-
     match methodName with
     | "initialize" ->
       eprintfn "Server received an initialize request."
