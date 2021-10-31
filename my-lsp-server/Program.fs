@@ -11,9 +11,14 @@ let main _ =
   let server = createLspServer ()
 
   async {
-    while true do
-      let! request = reader
-      server request
+    try
+      while true do
+        let! request = reader
+        server request
+    with
+    | ex ->
+      eprintfn "Server failed: %A" ex
+      exit 1
   }
   |> Async.RunSynchronously
 
