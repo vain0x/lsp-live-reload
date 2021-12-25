@@ -41,3 +41,7 @@ Requirement:
 
 I want to make this a library but not yet...
 
+## Notes
+
+- Use `vscode-languageclient` version >= `8.0.0-next.7`
+    - v7 has an issue that client doesn't send exit notification to server correctly. See also <https://github.com/microsoft/vscode-languageserver-node/pull/776>

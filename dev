@@ -3,7 +3,7 @@
 set -eu
 trap 'kill 0' INT
 
-dotnet watch -p my-lsp-server build &
+dotnet watch --project my-lsp-server build &
 
 (
     cd vscode-ext
