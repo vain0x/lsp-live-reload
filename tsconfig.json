@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "composite": true,
+        "declaration": true,
+
+        "baseUrl": ".",
+        "esModuleInterop": true,
+        "lib": [
+            "ES2020"
+        ],
+        "module": "ES2020",
+        "moduleResolution": "Node16",
+        "outDir": "dist",
+        "preserveWatchOutput": true,
+        "rootDir": "src",
+        "sourceMap": true,
+        "strict": true,
+        "target": "ES2020"
+    },
+    "files": [
+        "src/index.ts"
+    ]
+}

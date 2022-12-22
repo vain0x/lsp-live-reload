@@ -3,7 +3,8 @@
 import path from "path"
 import { ExtensionContext } from "vscode"
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node"
-import { startLspSessionDev } from "./lsp_session_dev"
+// import { startLspSessionDev } from "./lsp_session_dev"
+import { ErrorEvent, LiveReloadLspSession } from "lsp-live-reload"
 
 const LSP_SERVER_COMMAND = process.env["LSP_SERVER_COMMAND"] ?? ""
 const LSP_SERVER_OUTPUT_DIR = process.env["LSP_SERVER_OUTPUT_DIR"] ?? ""
@@ -17,18 +18,19 @@ export const activate = (context: ExtensionContext): void => {
   const command = path.normalize(LSP_SERVER_COMMAND).replace(outputDir, backupDir)
   console.log("command =", command)
 
-  startLspSessionDev({
-    outputDir,
-    backupDir,
-    context,
-    newLanguageClient: () => newLanguageClient(command),
-  })
-}
+  const client = newLanguageClient(command)
 
-/** Called when the extension is being terminated. */
-export const deactivate = (): Thenable<void> | undefined => {
-  console.log("deactivated.")
-  return undefined
+  const session = new LiveReloadLspSession(client, { outputDir, backupDir, context })
+
+  session.addEventListener("willReload", () => {
+    console.error("reloading")
+  })
+  session.addEventListener("didReload", () => {
+    console.error("reloaded")
+  })
+  session.addEventListener("error", (ev: ErrorEvent) => {
+    console.error("error:", ev.error.message)
+  })
 }
 
 /** Creates a LanguageClient instance with options. */
