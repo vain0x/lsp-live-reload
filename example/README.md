@@ -37,10 +37,6 @@ Requirement:
     - Start debugging
     - Modify server (changing comment or logging message)
 
-## Library?
-
-I want to make this a library but not yet...
-
 ## Notes
 
 - Use `vscode-languageclient` version >= `8.0.0-next.7`

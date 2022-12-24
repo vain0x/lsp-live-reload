@@ -3,33 +3,46 @@
 import path from "path"
 import { ExtensionContext } from "vscode"
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node"
-// import { startLspSessionDev } from "./lsp_session_dev"
-import { ErrorEvent, LiveReloadLspSession } from "lsp-live-reload"
-
-const LSP_SERVER_COMMAND = process.env["LSP_SERVER_COMMAND"] ?? ""
-const LSP_SERVER_OUTPUT_DIR = process.env["LSP_SERVER_OUTPUT_DIR"] ?? ""
+import { computeBackupOptions, ErrorEvent, LspLiveReload } from "lsp-live-reload"
 
 /** Called when the extension is activated. */
-export const activate = (context: ExtensionContext): void => {
-  console.log("activated. LSP_SERVER_COMMAND =", LSP_SERVER_COMMAND, "LSP_SERVER_OUTPUT_DIR =", LSP_SERVER_OUTPUT_DIR)
+export const activate = async (context: ExtensionContext): Promise<void> => {
+  console.log("Extension is activated.")
 
-  const outputDir = stripTrailingSep(path.normalize(LSP_SERVER_OUTPUT_DIR))
-  const backupDir = outputDir + "_backup"
-  const command = path.normalize(LSP_SERVER_COMMAND).replace(outputDir, backupDir)
-  console.log("command =", command)
+  // Read configurations from environment variables:
+  const LSP_SERVER_COMMAND = process.env["LSP_SERVER_COMMAND"] ?? ""
+  const LSP_SERVER_OUTPUT_DIR = process.env["LSP_SERVER_OUTPUT_DIR"] ?? ""
+  console.log(`LSP_SERVER_COMMAND = '${LSP_SERVER_COMMAND}'`)
+  console.log(`LSP_SERVER_OUTPUT_DIR = '${LSP_SERVER_OUTPUT_DIR}'`)
 
+  if (!path.isAbsolute(LSP_SERVER_COMMAND))
+    throw new Error("$LSP_SERVER_COMMAND must be absolute")
+
+  if (!path.isAbsolute(LSP_SERVER_OUTPUT_DIR))
+    throw new Error(`$LSP_SERVER_OUTPUT_DIR must be absolute`)
+
+  // Setting up for LspLiveReload.
+  const { command, backupOptions } = computeBackupOptions(LSP_SERVER_COMMAND, { backup: "parentDirectory" })
+  console.log(`command = '${command}'`)
+  console.log("backupOptions =", backupOptions)
+
+  // Create client and LspLiveReload, which automatically starts.
   const client = newLanguageClient(command)
+  context.subscriptions.push(client)
+  const liveReload = new LspLiveReload(client, backupOptions)
+  context.subscriptions.push(liveReload)
 
-  const session = new LiveReloadLspSession(client, { outputDir, backupDir, context })
-
-  session.addEventListener("willReload", () => {
-    console.error("reloading")
-  })
-  session.addEventListener("didReload", () => {
-    console.error("reloaded")
-  })
-  session.addEventListener("error", (ev: ErrorEvent) => {
+  // Propagate error.
+  liveReload.addEventListener("error", (ev: ErrorEvent) => {
     console.error("error:", ev.error.message)
+  })
+
+  // For debugging, print messages when reload happens.
+  liveReload.addEventListener("willReload", () => {
+    console.log("LspLiveReload: start reloading.")
+  })
+  liveReload.addEventListener("didReload", () => {
+    console.log("LspLiveReload: reloaded.")
   })
 }
 
@@ -39,10 +52,7 @@ const newLanguageClient = (lspServerCommand: string): LanguageClient => {
     command: lspServerCommand,
   }
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: "plaintext" }],
+    documentSelector: [{ scheme: "file", language: "plaintext" }],
   }
   return new LanguageClient("my-lsp-server", "MyLspServer", serverOptions, clientOptions)
 }
-
-const stripTrailingSep = (filepath: string): string =>
-  filepath.endsWith(path.sep) ? filepath.slice(0, filepath.length - path.sep.length) : filepath
