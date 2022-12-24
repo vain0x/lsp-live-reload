@@ -4,12 +4,14 @@
 import fs, { FSWatcher } from "fs"
 import fsP from "fs/promises"
 import path from "path"
-import { LanguageClient, State } from "vscode-languageclient/node"
+import vscode, { Disposable, ProgressLocation } from "vscode"
+import { LanguageClient } from "vscode-languageclient/node"
 import debounce from "lodash/debounce"
 
-const DEBOUNCE_TIME = 700
-const RETRY_TIME = 60 * 1000
-const RETRY_INTERVAL = 100
+const DEBOUNCE_TIME = 700 // 0.7s
+const RETRY_TIME = 60 * 1000 // 1min
+const RETRY_INTERVAL = 100 // 0.1s
+const RELOAD_STATUS_DURATION = 10000 // 10s
 
 type EventType =
   | "willReload"
@@ -108,7 +110,10 @@ export class LspLiveReload implements EventTarget {
   #eventTarget = new EventTarget()
 
   #backupFiles: (() => Promise<void>)
+  #notification: Disposable | null = null
   #watcher: FSWatcher | null = null
+
+  #reloadCount = 0
 
   constructor(client: LanguageClient, backupOptions: BackupOptions) {
     this.#client = client
@@ -176,33 +181,52 @@ export class LspLiveReload implements EventTarget {
     const { signal } = this.#abortController
     if (signal.aborted) return
 
-    try {
-      this.#emit("willReload")
+    const promise = (async () => {
+      try {
+        this.#emit("willReload")
 
-      if (client.needsStop()) {
-        this.#emit("willStopClient")
-        await client.stop(2000)
+        if (client.needsStop()) {
+          this.#emit("willStopClient")
+          await client.stop(2000)
 
-        // https://github.com/microsoft/vscode-languageserver-node/blob/release/client/8.0.2/client/src/node/main.ts#L231
-        await delay(2000 + 200) // Wait until the process is actually terminated.
-        this.#emit("didStopClient")
+          // https://github.com/microsoft/vscode-languageserver-node/blob/release/client/8.0.2/client/src/node/main.ts#L231
+          await delay(2000 + 200) // Wait until the process is actually terminated.
+          this.#emit("didStopClient")
+        }
+
+        {
+          this.#emit("willCopy")
+          await this.#backupFiles!()
+          this.#emit("didCopy")
+        }
+
+        {
+          this.#emit("willStartClient")
+          await client.start()
+        }
+
+        this.#emit("didReload")
+      } catch (err) {
+        this.#emitError(err)
       }
+    })()
+    this.#notifyReload(promise)
+    return promise
+  }
 
-      {
-        this.#emit("willCopy")
-        await this.#backupFiles!()
-        this.#emit("didCopy")
-      }
+  #notifyReload(promise: Promise<void>): void {
+    if (this.#abortController.signal.aborted) return
 
-      {
-        this.#emit("willStartClient")
-        await client.start()
-      }
+    const id = ++this.#reloadCount
 
-      this.#emit("didReload")
-    } catch (err) {
-      this.#emitError(err)
-    }
+    this.#notification?.dispose()
+    this.#notification = vscode.window.setStatusBarMessage(`LSP reloading... (#${id})`, promise)
+
+    promise.then(() => {
+      if (this.#abortController.signal.aborted) return
+
+      this.#notification = vscode.window.setStatusBarMessage(`LSP reloaded (#${id})`, RELOAD_STATUS_DURATION)
+    })
   }
 
   // Implements Disposable:
@@ -212,6 +236,7 @@ export class LspLiveReload implements EventTarget {
 
     this.#abortController.abort()
     this.#client.stop()
+    this.#notification?.dispose()
     this.#watcher?.close()
   }
 
