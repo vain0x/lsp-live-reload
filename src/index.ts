@@ -115,12 +115,6 @@ export class LspLiveReload implements EventTarget {
 
     const { signal } = this.#abortController
 
-    // FIXME: make this configurable
-    // context.subscriptions.push(
-    //   client.onDidChangeState(e => {
-    //     console.log("client:", getStateName(e.oldState), "->", getStateName(e.newState))
-    //   }))
-
     // Reload debounce mechanism:
     const requestReload = debounce(async () => {
       await this.#performReload()
@@ -336,44 +330,8 @@ const copyDirRecursively = async (srcDir: string, destDir: string, signal: Abort
   }
 }
 
-const unlinkDirRecursively = async (dir: string): Promise<void> => {
-  const files = await fsP.readdir(dir).catch((err: { code: string }) => {
-    if (err.code === "ENOENT") {
-      return []
-    }
-    throw err
-  })
-
-  for (const filename of files) {
-    const filepath = path.join(dir, filename)
-    const stat = await fsP.lstat(filepath)
-    if (stat.isDirectory()) {
-      await unlinkDirRecursively(filepath)
-    } else {
-      await fsP.unlink(filepath).catch(err => {
-        if (err.code === "ENOENT") {
-          return // OK.
-        }
-        throw err
-      })
-    }
-  }
-
-  await fsP.unlink(dir).catch(err => {
-    if (err.code === "ENOENT") {
-      return // OK.
-    }
-    throw err
-  })
-}
-
 // ===============================================
 // Utilities
-
-/** Interface for `ExtensionContext` from `vscode` */
-interface ExtensionContext {
-  readonly subscriptions: { dispose: () => void }[]
-}
 
 class AbortError extends Error {
   constructor() {
@@ -384,15 +342,6 @@ class AbortError extends Error {
 /** Waits for several time. */
 const delay = (timeMs: number) =>
   new Promise<void>(resolve => { setTimeout(resolve, timeMs) })
-
-const STATE_NAMES: Record<number, string | undefined> = {
-  1: "Stopped",
-  2: "Running",
-  3: "Starting",
-}
-
-const getStateName = (state: State): string =>
-  STATE_NAMES[state] ?? "Unknown"
 
 const stripTrailingSep = (filepath: string): string =>
   filepath.endsWith(path.sep) ? filepath.slice(0, filepath.length - path.sep.length) : filepath
