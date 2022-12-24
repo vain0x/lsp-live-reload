@@ -11,11 +11,6 @@ const DEBOUNCE_TIME = 700
 const RETRY_TIME = 60 * 1000
 const RETRY_INTERVAL = 100
 
-export interface Options {
-  /** context of VSCode extension */
-  context: ExtensionContext
-}
-
 type EventType =
   | "willReload"
   | "didReload"
@@ -113,25 +108,18 @@ export class LspLiveReload implements EventTarget {
   #eventTarget = new EventTarget()
 
   #backupFiles: (() => Promise<void>)
+  #watcher: FSWatcher | null = null
 
-  constructor(client: LanguageClient, backupOptions: BackupOptions, options: Options) {
+  constructor(client: LanguageClient, backupOptions: BackupOptions) {
     this.#client = client
 
     const { signal } = this.#abortController
-    const { context } = options
-
-    context.subscriptions.push({
-      dispose: () => {
-        client.stop()
-        this.#abortController.abort()
-      }
-    })
 
     // FIXME: make this configurable
-    context.subscriptions.push(
-      client.onDidChangeState(e => {
-        console.log("client:", getStateName(e.oldState), "->", getStateName(e.newState))
-      }))
+    // context.subscriptions.push(
+    //   client.onDidChangeState(e => {
+    //     console.log("client:", getStateName(e.oldState), "->", getStateName(e.newState))
+    //   }))
 
     // Reload debounce mechanism:
     const requestReload = debounce(async () => {
@@ -140,7 +128,6 @@ export class LspLiveReload implements EventTarget {
 
     // Watcher:
     let watcher: FSWatcher | null = null
-    context.subscriptions.push({ dispose: () => { watcher?.close() } })
     void (async () => {
       try {
         await fsP.mkdir(backupOptions.watchDir, { recursive: true })
@@ -155,6 +142,7 @@ export class LspLiveReload implements EventTarget {
           requestReload()
         })
         watcher.on("error", err => this.#emitError(err))
+        this.#watcher = watcher
       } catch (err) {
         this.#emitError(err)
       }
@@ -223,6 +211,16 @@ export class LspLiveReload implements EventTarget {
     }
   }
 
+  // Implements Disposable:
+
+  dispose(): void {
+    if (this.#abortController.signal.aborted) return
+
+    this.#abortController.abort()
+    this.#client.stop()
+    this.#watcher?.close()
+  }
+
   // Implements EventTarget:
 
   /**
@@ -253,6 +251,8 @@ export class LspLiveReload implements EventTarget {
     const e = typeof err === "object" && err && err instanceof Error
       ? err
       : new Error(String(err))
+
+    if (e instanceof AbortError) return
 
     this.dispatchEvent(new ErrorEvent(e))
   }
