@@ -34,7 +34,7 @@ interface BackupOptions {
   copyDest: string
   /** Directory to be watched. */
   watchDir: string
-  /** File to be watched if not null. */
+  /** Basename of file to be watched if not null. */
   watchFile: string | null
 }
 
@@ -82,7 +82,7 @@ export const computeBackupOptions = (command: string, options: {
         copySrc: normalizedCommand,
         copyDest: `${normalizedCommand}.BACKUP.exe`,
         watchDir: path.dirname(normalizedCommand),
-        watchFile: destCommand,
+        watchFile: path.basename(normalizedCommand),
       }
       return { command: destCommand, backupOptions }
     }
