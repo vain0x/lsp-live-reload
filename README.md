@@ -1,47 +1,40 @@
-# Auto Reload LSP Server on VSCode
+# LspLiveReload
 
-Example of VSCode extension as LSP client with auto-reload enabled.
+~~`npm install lsp-live-reload`~~ (not uploaded yet)
 
 ## What
 
-- Motivation: While running a server, its executable is locked and can't be rewritten.
-- To do: This extension copies all files of server to another directory and execute it.
-    - Whenever files change, stop server, copy files again, and restart.
+**Motivation**:
+While running a server, its executable is locked and can't be rewritten.
 
-## Contents
+**Solution**:
+Copy all files of the server to another directory and instead execute it.
+On rebuilt, stop server, copy files again, and restart.
 
-- .vscode/launch.json
-    - See environment variables
-- my-lsp-server
-    - .NET application that is tiny LSP server (F#)
-- vscode-ext
-    - VSCode extension
+## Usage
 
-## Try
+```ts
+export const active = async (context: ExtensionContext) => {
+  const { command, backupOptions } = computeBackupOptions(LSP_SERVER_COMMAND, { backup: "parentDirectory" })
 
-Requirement:
+  const client = newLanguageClient(command)
+  context.subscriptions.push(client)
 
-- .NET SDK
-- bash (Use Git Bash on Windows.)
+  const liveReload = new LspLiveReload(client, backupOptions)
+  context.subscriptions.push(liveReload)
 
-```sh
-# Restore and build things for first time.
-./setup
-
-# Watch files to rebuild server and extension.
-./dev
+  liveReload.addEventListener("error", (ev: ErrorEvent) => {
+    console.error("error:", ev.error.message)
+  })
+}
 ```
 
-- While `./dev` is running, do:
-    - Open this directory on VSCode
-    - Start debugging
-    - Modify server (changing comment or logging message)
+Points:
 
-## Library?
+- Need an absolute path to the LSP server command, `LSP_SERVER_COMMAND`.
+- Call `computeBackupOptions` function.
+- Create a `LanguageClient` instance, using `vscode-languageclient` package.
+- Create a `LspLiveReload` instance, which automatically starts LSP client.
+- Attach `error` event to watch reloading error.
 
-I want to make this a library but not yet...
-
-## Notes
-
-- Use `vscode-languageclient` version >= `8.0.0-next.7`
-    - v7 has an issue that client doesn't send exit notification to server correctly. See also <https://github.com/microsoft/vscode-languageserver-node/pull/776>
+See [example](example/vscode-ext/src/extension.ts) for details.

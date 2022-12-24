@@ -2,10 +2,13 @@
 
 set -eu
 
-dotnet build
+dotnet build &
 
 (
     cd vscode-ext
     npm ci
+    npm link ../..
     npm run webpack-build
-)
+) &
+
+wait
