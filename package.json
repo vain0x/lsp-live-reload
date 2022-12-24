@@ -1,7 +1,7 @@
 {
   "name": "lsp-live-reload",
   "version": "0.1.0",
-  "description": "Provide live reload feature for LSP server development with VSCode",
+  "description": "Library to live-reload LSP client in VSCode extension for faster development",
   "scripts": {
     "build": "tsc --build",
     "watch": "tsc --watch"
@@ -10,7 +10,7 @@
   "license": "CC0-1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vain0x/vscode-auto-reload-lsp-server.git"
+    "url": "git+https://github.com/vain0x/lsp-live-reload.git"
   },
   "files": [
     "dist/index.d.ts",

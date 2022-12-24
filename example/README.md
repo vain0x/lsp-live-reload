@@ -2,12 +2,6 @@
 
 Example of VSCode extension as LSP client with auto-reload enabled.
 
-## What
-
-- Motivation: While running a server, its executable is locked and can't be rewritten.
-- To do: This extension copies all files of server to another directory and execute it.
-    - Whenever files change, stop server, copy files again, and restart.
-
 ## Contents
 
 - .vscode/launch.json
