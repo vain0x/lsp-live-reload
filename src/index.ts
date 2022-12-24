@@ -12,12 +12,6 @@ const RETRY_TIME = 60 * 1000
 const RETRY_INTERVAL = 100
 
 export interface Options {
-  /** Directory where executable and related files are written. */
-  outputDir: string
-
-  /** Another directory where contents are copied from outputDir. */
-  backupDir: string
-
   /** context of VSCode extension */
   context: ExtensionContext
 }
@@ -35,27 +29,101 @@ type EventType =
   | "didClean"
   | "error"
 
-export class LiveReloadLspSession implements EventTarget {
+interface BackupOptions {
+  copyType: "file" | "directory"
+  /** Source file or directory on backup. */
+  copySrc: string
+  /** Destination file or directory on backup. */
+  copyDest: string
+  /** Directory to be watched. */
+  watchDir: string
+  /** File to be watched if not null. */
+  watchFile: string | null
+}
+
+/** Compute options for LspLiveReload and LanguageClient.
+ *
+ * For live-reload feature, LanguageClient needs to spawn instance in a backup directory.
+ * This function converts the command (filename) of LSP server to point backup one.
+ *
+ * This function also computes where to watch and how to make backup here
+ * depending on options.
+ * `backupOptions` is returned to be passed in `LspLiveReload`.
+ *
+ * @param command
+ *    File path to the server command.
+ *    Path must be **absolute**. (E.g. `"/path/to/server.exe"`)
+ */
+export const computeBackupOptions = (command: string, options: {
+  /** Specify what to copy (required)
+   *
+   * - "commandOnly": Copy the file specified by the command only
+   * - "parentDirectory": Copy the parent directory of the command
+   */
+  backup: "commandOnly" | "parentDirectory"
+}): {
+  /** File path to the server command. */
+  command: string
+  /** This should be passed in `LspLiveReload` constructor. */
+  backupOptions: BackupOptions
+} => {
+  if (!path.isAbsolute(command))
+    throw new Error(`command (path to LSP server executable) must be absolute: '${command}'`)
+
+  if (path.dirname(command) === "/")
+    throw new Error("command must be under a non-root directory.")
+
+  const normalizedCommand = path.normalize(command)
+  const backupType = options.backup
+
+  let backupOptions: BackupOptions
+  switch (backupType) {
+    case "commandOnly": {
+      const destCommand = `${normalizedCommand}.BACKUP.exe`
+      backupOptions = {
+        copyType: "file",
+        copySrc: normalizedCommand,
+        copyDest: `${normalizedCommand}.BACKUP.exe`,
+        watchDir: path.dirname(normalizedCommand),
+        watchFile: destCommand,
+      }
+      return { command: destCommand, backupOptions }
+    }
+    case "parentDirectory": {
+      const copySrc = stripTrailingSep(path.dirname(normalizedCommand))
+      const copyDest = `${copySrc}.BACKUP.d`
+      const destCommand = `${copyDest}/${path.basename(normalizedCommand)}`
+      backupOptions = {
+        copyType: "directory",
+        copySrc: copySrc,
+        copyDest: copyDest,
+        watchDir: copySrc,
+        watchFile: null,
+      }
+      return { command: destCommand, backupOptions }
+    }
+    default: throw never(backupType)
+  }
+}
+
+export class LspLiveReload implements EventTarget {
   #client: LanguageClient
-  #options: Options
 
   #abortController = new AbortController()
   #eventTarget = new EventTarget()
 
   #backupFiles: (() => Promise<void>)
 
-  constructor(client: LanguageClient, options: Options) {
+  constructor(client: LanguageClient, backupOptions: BackupOptions, options: Options) {
     this.#client = client
-    this.#options = options
 
     const { signal } = this.#abortController
-    const { outputDir, backupDir, context } = options
+    const { context } = options
 
     context.subscriptions.push({
       dispose: () => {
         client.stop()
         this.#abortController.abort()
-        this.cleanBackup()
       }
     })
 
@@ -71,16 +139,48 @@ export class LiveReloadLspSession implements EventTarget {
     }, DEBOUNCE_TIME)
 
     // Watcher:
-    const watcher = fs.watch(outputDir)
-    context.subscriptions.push({ dispose: () => { watcher.close() } })
-    watcher.on("change", () => requestReload())
-    watcher.on("error", err => this.#emitError(err))
+    let watcher: FSWatcher | null = null
+    context.subscriptions.push({ dispose: () => { watcher?.close() } })
+    void (async () => {
+      try {
+        await fsP.mkdir(backupOptions.watchDir, { recursive: true })
+        if (signal.aborted) throw new AbortError()
+
+        watcher = fs.watch(backupOptions.watchDir)
+        watcher.on("change", (_ev, filename) => {
+          // Watch single file if specified; ignore others.
+          if (backupOptions.watchFile && backupOptions.watchFile !== filename) {
+            return
+          }
+          requestReload()
+        })
+        watcher.on("error", err => this.#emitError(err))
+      } catch (err) {
+        this.#emitError(err)
+      }
+    })()
 
     // Backup creator:
     // Copy files to not lock or mutate while running server.
     // (Note: Writing to running executable is rejected as ETXTBSY.)
     this.#backupFiles = async () => performAsyncWithRetry(async () => {
-      await copyDirRecursively(outputDir, backupDir, signal)
+      switch (backupOptions.copyType) {
+        case "file":
+          await fsP.copyFile(backupOptions.copySrc, backupOptions.copyDest).catch((err: { code: string }) => {
+            if (err.code === "ENOENT") {
+              return
+            }
+            throw err
+          })
+          return
+
+        case "directory":
+          // FIXME: should copy only changes
+          await copyDirRecursively(backupOptions.copySrc, backupOptions.copyDest, signal)
+          return
+
+        default: throw never(backupOptions.copyType)
+      }
     }, {
       count: RETRY_TIME / RETRY_INTERVAL,
       intervalMs: RETRY_INTERVAL,
@@ -120,19 +220,6 @@ export class LiveReloadLspSession implements EventTarget {
       this.#emit("didReload")
     } catch (err) {
       this.#emitError(err)
-    }
-  }
-
-  async cleanBackup() {
-    const { backupDir } = this.#options
-
-    this.#emit("willClean")
-    try {
-      await unlinkDirRecursively(backupDir)
-    } catch (err) {
-      this.#emitError(err)
-    } finally {
-      this.#emit("didClean")
     }
   }
 
@@ -244,6 +331,7 @@ const copyDirRecursively = async (srcDir: string, destDir: string, signal: Abort
       console.error("warn: couldn't copy file", srcFile)
     }
 
+    // Ensure not to return if aborted.
     if (signal.aborted) throw new AbortError()
   }
 }
@@ -305,3 +393,8 @@ const STATE_NAMES: Record<number, string | undefined> = {
 
 const getStateName = (state: State): string =>
   STATE_NAMES[state] ?? "Unknown"
+
+const stripTrailingSep = (filepath: string): string =>
+  filepath.endsWith(path.sep) ? filepath.slice(0, filepath.length - path.sep.length) : filepath
+
+const never = (_: never) => new Error("never")
