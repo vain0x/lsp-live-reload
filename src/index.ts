@@ -4,7 +4,7 @@
 import fs, { FSWatcher } from "fs"
 import fsP from "fs/promises"
 import path from "path"
-import vscode, { Disposable, ProgressLocation } from "vscode"
+import vscode, { Disposable } from "vscode"
 import { LanguageClient } from "vscode-languageclient/node"
 import debounce from "lodash/debounce"
 
@@ -262,7 +262,6 @@ export class LspLiveReload implements EventTarget {
   }
 
   #emit(type: EventType) {
-    console.log("emit", type)
     this.dispatchEvent(new Event(type))
   }
 
